@@ -326,6 +326,25 @@ def test_hourly_interface_rejects_evaluation_file(tmp_path):
         list(data.iter_hourly_batches(evaluation))
 
 
+def test_development_day_coverage_differs_from_window_coverage(training_workspace):
+    workspace, dates, rows = training_workspace
+    for row in rows:
+        if row["product_id"] == 1 and dates[41] <= row["dt"] <= dates[68]:
+            row["hours_stock_status"] = [1] * 24
+            row["stock_hour6_22_cnt"] = 16
+    daily = workspace / "daily_sales.parquet"
+    pq.write_table(data.daily_table(table_from_rows(rows), dates), daily)
+    metadata = pd.DataFrame({"city_id": [0, 0, 0], "store_id": [0, 0, 0], "product_id": [0, 1, 2],
+                             "volume_group": [0, 1, 2], "stockout_group": [0, 1, 2]})
+    for name in data.HIERARCHY_COLUMNS:
+        metadata[name] = rows[0][name]
+    output = workspace / "analysis"
+    output.mkdir()
+    result = data.development_analysis(daily, metadata, output, batch_size=17)
+    assert result["series_without_fully_available_days"]["numerator"] == 0
+    assert result["series_without_fully_available_window_targets"]["numerator"] == 1
+
+
 def test_reject_workspace_inside_repository():
     with pytest.raises(ValueError, match="outside the repository"):
         data.prepare_data(Path(data.__file__).resolve().parents[1])

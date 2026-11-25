@@ -530,6 +530,7 @@ def development_analysis(daily_path, inventory, output, batch_size=16384):
     lookup = {key: index for index, key in enumerate(series[KEY_COLUMNS].itertuples(index=False, name=None))}
     history_days = np.zeros(len(series), dtype=np.int32)
     available_days = np.zeros(len(series), dtype=np.int32)
+    available_target_days = np.zeros(len(series), dtype=np.int32)
     unavailable_hours = np.zeros(len(series), dtype=np.int32)
     total_sales = np.zeros(len(series), dtype=np.float64)
     for table in iter_daily_batches(daily_path, batch_size=batch_size, through_day=69):
@@ -556,6 +557,7 @@ def development_analysis(daily_path, inventory, output, batch_size=16384):
         totals["available_hours_1_10"] += int(available[days <= 10].sum())
         totals["available_hours_1_14"] += int(available[days <= 14].sum())
         window = (days >= 42) & (days <= 69)
+        np.add.at(available_target_days, indexes, fully_available & window)
         totals["window_targets"] += int(window.sum())
         totals["eligible_window_targets"] += int(fully_available[window].sum())
         update_counts(daily_counts, frame["sale_amount"].to_numpy())
@@ -587,6 +589,7 @@ def development_analysis(daily_path, inventory, output, batch_size=16384):
     if not np.all(history_days == 69) or n != len(inventory) * 69:
         raise ValueError("Development analysis omitted or duplicated history")
     for name, values in [("history_days", history_days), ("available_days", available_days),
+                         ("available_target_days", available_target_days),
                          ("unavailable_hours", unavailable_hours), ("total_sales", total_sales)]:
         series[name] = values
     series["available_hours"] = history_days * 24 - unavailable_hours
@@ -635,6 +638,7 @@ def development_analysis(daily_path, inventory, output, batch_size=16384):
         "fully_available_days_11_14": ratio(totals["available_days_11_14"], len(inventory) * 4),
         "development_window_targets": ratio(totals["eligible_window_targets"], totals["window_targets"]),
         "series_without_fully_available_days": ratio((available_days == 0).sum(), len(inventory)),
+        "series_without_fully_available_window_targets": ratio((available_target_days == 0).sum(), len(inventory)),
         "history_days_per_series": distribution(Counter(history_days)),
         "available_days_per_series": distribution(Counter(available_days)),
         "available_hours_per_series": distribution(Counter(series["available_hours"])),
